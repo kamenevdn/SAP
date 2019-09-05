@@ -49,13 +49,20 @@ class sap():
                 grid.firstVisibleRow = visible_row
                 visible_row = visible_row + max_rows
 
-    def read_alv(self, grid, cols, cols_name, max_rows=30):
+    def read_alv(self, grid, cols=None, tech_names = False, max_rows=30):
         """Функция для чтения экранной ALV-таблицы.
-        Возвращает объект типа pandas.DataFrame с колонками из массива cols.
+        Возвращает объект типа pandas.DataFrame со всеми колонками ALV (или только из массива cols).
         Параметры:
         grid: идентификатор ALV-grid таблицы на экране запущенной сессии.
-        Например: grid = session.findById("wnd[0]/usr/cntlALV0101/shellcont/shell")
-        cols: список технических названий полей таблицы, которые необходимо прочитать. Например: ['MATNR','MATKL']
+              Например: grid = session.findById("wnd[0]/usr/cntlALV0101/shellcont/shell")
+              
+        cols: список технических названий полей таблицы, которые необходимо прочитать.
+              Например: ['MATNR','MATKL']
+              Если не задан, то используются все выведенные поля ALV-таблицы.
+              
+        tech_names: boolean, если True, то в качестве названий столбцов используются технические имена полей.
+                    Если False, то берется краткое название.
+        
         max_rows: количество строк для скроллинга таблицы за один раз. Необходимо для подгрузки длинных таблиц. По умолчанию 30.
         """
         rows = grid.rowcount
@@ -64,13 +71,31 @@ class sap():
         
         data = []
         
+        #Если список колонок не задан, то читаем все колонки с экрана
+        if cols == None:
+            cols = list(grid.ColumnOrder)
+            
+        cols_name = []
+        if tech_names:
+            cols_name = cols
+        else:
+            for col in cols:
+                cols_name.append(grid.GetColumnTitles(col)[1])
+            
         #Читаем каждую строку ALV-таблицы по указанным именам столбцов
         for row in range(0,rows):
             row_data = {}
             
             for col_name in cols:         
                 col_value = grid.getcellvalue(row, col_name)
-                row_data[col_name] = col_value
+                if grid.GetColumnDataType(col_name) == 'int':
+                    row_data[col_name] = self.replace_minus_int(col_value)
+                #Под decimal может быть таймштамп, поэтому если в строке ':', то пропускаем
+                elif grid.GetColumnDataType(col_name) == 'decimal' and ':' not in col_value:
+                    row_data[col_name] = self.replace_minus_float(col_value)
+                else:
+                    row_data[col_name] = col_value
+                    
                 
             data.append(row_data)
         
@@ -85,23 +110,28 @@ class sap():
         string = string.replace('.','')
         string = string.replace(' ','')
         string = string.replace(',','.')
-        if string[-1] == '-':
-            int_string = -int(string.replace('-',''))
+        if len(string)>0:
+            if string[-1] == '-':
+                int_string = -int(string.replace('-',''))
+            else:
+                int_string = int(string)
+            return int_string
         else:
-            int_string = int(string)
-        return(int_string)
+            return 0
     
     def replace_minus_float(self, string):
         """Функция замены минуса после символьного значения на минус перед int числом"""
         string = string.replace('.','')
         string = string.replace(' ','')
         string = string.replace(',','.')
-        if string[-1] == '-':
-            float_string = -float(string.replace('-',''))
+        if len(string)>0:
+            if string[-1] == '-':
+                float_string = -float(string.replace('-',''))
+            else:
+                float_string = float(string)
+            return float_string
         else:
-            float_string = float(string)
-        return(float_string)
-
+            return 0
 
 def alvscroll(grid, max_rows=30):
     rows = grid.rowcount
