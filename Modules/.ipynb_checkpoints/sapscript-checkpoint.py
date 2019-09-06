@@ -249,4 +249,3 @@ class script:
         print('Ошибка')
         print(sys.exc_info())
         return
-
